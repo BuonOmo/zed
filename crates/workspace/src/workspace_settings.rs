@@ -8,6 +8,7 @@ pub struct WorkspaceSettings {
     pub confirm_quit: bool,
     pub show_call_status_icon: bool,
     pub autosave: AutosaveSetting,
+    pub max_tabs: usize,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -30,6 +31,11 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: off
     pub autosave: Option<AutosaveSetting>,
+    // Maximum open tabs in a pane. Will not close an unsaved
+    // tab. Set to `0` for unlimited tabs.
+    //
+    // Default: `5`
+    pub max_tabs: Option<usize>,
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
