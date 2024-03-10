@@ -164,7 +164,7 @@ pub struct PathLikeWithPosition<P> {
 
 impl<P> PathLikeWithPosition<P> {
     /// Parses a string that possibly has `:row:column` suffix.
-    /// Ignores trailing `:`s, so `test.rs:22:` is parsed as `test.rs:22`.
+    /// Ignores trailing `:...`s, so `test.rs:22:` is parsed as `test.rs:22`.
     /// If any of the row/column component parsing fails, the whole string is then parsed as a path like.
     pub fn parse_str<E>(
         s: &str,
@@ -205,10 +205,9 @@ impl<P> PathLikeWithPosition<P> {
                                 })
                             } else {
                                 let maybe_col_str =
-                                    if maybe_col_str.ends_with(FILE_ROW_COLUMN_DELIMITER) {
-                                        &maybe_col_str[..maybe_col_str.len() - 1]
-                                    } else {
-                                        maybe_col_str
+                                    match maybe_col_str.split_once(FILE_ROW_COLUMN_DELIMITER) {
+                                        Some((maybe_col_str, _)) => maybe_col_str,
+                                        None => maybe_col_str,
                                     };
                                 match maybe_col_str.parse::<u32>() {
                                     Ok(col) => Ok(Self {
@@ -216,7 +215,11 @@ impl<P> PathLikeWithPosition<P> {
                                         row: Some(row),
                                         column: Some(col),
                                     }),
-                                    Err(_) => fallback(s),
+                                    Err(_) => Ok(Self {
+                                        path_like: parse_path_like_str(path_like_str)?,
+                                        row: Some(row),
+                                        column: None,
+                                    }),
                                 }
                             }
                         }
@@ -356,10 +359,7 @@ mod tests {
             "test_file.rs:a:b",
             "test_file.rs::",
             "test_file.rs::1",
-            "test_file.rs:1::",
             "test_file.rs::1:2",
-            "test_file.rs:1::2",
-            "test_file.rs:1:2:3",
         ] {
             let actual = parse_str(input);
             assert_eq!(
@@ -374,7 +374,7 @@ mod tests {
         }
     }
 
-    // Trim off trailing `:`s for otherwise valid input.
+    // Trim off trailing `:...`s for otherwise valid input.
     #[test]
     fn path_with_position_parsing_special() {
         let input_and_expected = [
@@ -400,6 +400,22 @@ mod tests {
                     path_like: "crates/file_finder/src/file_finder.rs".to_string(),
                     row: Some(1902),
                     column: Some(13),
+                },
+            ),
+            (
+                "test.rs:42::1",
+                PathLikeWithPosition {
+                    path_like: "test.rs".to_string(),
+                    row: Some(42),
+                    column: None,
+                },
+            ),
+            (
+                "test.rs:42:21:content",
+                PathLikeWithPosition {
+                    path_like: "test.rs".to_string(),
+                    row: Some(42),
+                    column: Some(21),
                 },
             ),
         ];
