@@ -1541,8 +1541,13 @@ impl MultiBuffer {
             let buffer = buffer.read(cx);
             language = buffer.language_at(offset);
             file = buffer.file();
+            println!("---> path: {:#?}", file.full_path());
         }
-        language_settings(language.as_ref(), file, cx)
+        let settings = language_settings(language.as_ref(), file, cx);
+        add_editorconfig(settings, file.full_path())
+        // ~/.config/zed.json
+        // .editorconfig
+        // .zed/config.json
     }
 
     pub fn for_each_buffer(&self, mut f: impl FnMut(&Model<Buffer>)) {

@@ -43,8 +43,22 @@ pub struct AllLanguageSettings {
     /// The settings for GitHub Copilot.
     pub copilot: CopilotSettings,
     defaults: LanguageSettings,
+    editorconfig: Option<EditorConfig>,
     languages: HashMap<Arc<str>, LanguageSettings>,
 }
+
+/*
+property::Charset
+property::EndOfLine
+property::TabWidth # to consider
+property::FinalNewline -> ensure_final_newline_on_save
+property::IndentSize -> tab_size
+property::IndentStyle -> hard_tabs
+property::MaxLineLen -> preferred_line_length
+property::TrimTrailingWs -> remove_trailing_whitespace_on_save
+*/
+
+fn from_editorconfig(editorconfig: &ec4rs::Properties) -> LanguageSettings {}
 
 /// The settings for a particular language.
 #[derive(Debug, Clone, Deserialize)]
@@ -375,12 +389,18 @@ impl InlayHintSettings {
 impl AllLanguageSettings {
     /// Returns the [`LanguageSettings`] for the language with the specified name.
     pub fn language<'a>(&'a self, language_name: Option<&str>) -> &'a LanguageSettings {
-        if let Some(name) = language_name {
+        let settings = if let Some(name) = language_name {
             if let Some(overrides) = self.languages.get(name) {
-                return overrides;
+                overrides
             }
+        } else {
+            &self.defaults
+        };
+        if let Some(editorconfig) = &self.editorconfig {
+            settings.with_editor_config(editorconfig)
+        } else {
+            settings
         }
-        &self.defaults
     }
 
     /// Returns whether GitHub Copilot is enabled for the given path.
