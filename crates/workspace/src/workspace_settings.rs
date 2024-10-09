@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use anyhow::Result;
 use collections::HashMap;
 use gpui::AppContext;
@@ -17,6 +19,7 @@ pub struct WorkspaceSettings {
     pub when_closing_with_no_tabs: CloseWindowWhenNoItems,
     pub use_system_path_prompts: bool,
     pub command_aliases: HashMap<String, String>,
+    pub max_tabs: Option<NonZeroUsize>,
 }
 
 #[derive(Copy, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -98,6 +101,11 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: true
     pub command_aliases: Option<HashMap<String, String>>,
+    // Maximum open tabs in a pane. Will not close an unsaved
+    // tab. Set to `None` for unlimited tabs.
+    //
+    // Default: `5`
+    pub max_tabs: Option<NonZeroUsize>,
 }
 
 #[derive(Deserialize)]

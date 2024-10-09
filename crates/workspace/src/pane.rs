@@ -797,6 +797,34 @@ impl Pane {
         destination_index: Option<usize>,
         cx: &mut ViewContext<Self>,
     ) {
+        let max_tabs = WorkspaceSettings::get_global(cx).max_tabs;
+        if let Some(max_tabs) = max_tabs {
+            // Reduce over the activation history to get every dirty items up to max_tabs
+            // count.
+            let mut index_list = Vec::new();
+            let mut items_len = self.items_len();
+            for entry in self.activation_history.iter() {
+                if items_len < max_tabs.get() {
+                    break;
+                }
+                let index_to_remove = self.items.iter().enumerate().find_map(|(index, item)| {
+                    (!item.is_dirty(cx) && item.item_id() == entry.entity_id).then_some(index)
+                });
+                if let Some(index_to_remove) = index_to_remove {
+                    index_list.push(index_to_remove);
+                    items_len -= 1;
+                }
+            }
+            // The sort and reverse is necessary since we remove items
+            // using their index position, hence removing from the end
+            // of the list first to avoid changing indexes.
+            index_list.sort();
+            index_list
+                .iter()
+                .rev()
+                .for_each(|index| self.remove_item(*index, false, false, cx));
+        }
+
         if item.is_singleton(cx) {
             if let Some(&entry_id) = item.project_entry_ids(cx).get(0) {
                 let project = self.project.read(cx);
@@ -2624,6 +2652,8 @@ pub fn render_item_indicator(item: Box<dyn ItemHandle>, cx: &WindowContext) -> O
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZero;
+
     use super::*;
     use crate::item::test::{TestItem, TestProjectItem};
     use gpui::{TestAppContext, VisualTestContext};
@@ -2645,6 +2675,54 @@ mod tests {
                 .close_active_item(&CloseActiveItem { save_intent: None }, cx)
                 .is_none())
         });
+    }
+
+    #[gpui::test]
+    async fn test_add_item_capped_to_max_tabs(cx: &mut TestAppContext) {
+        init_test(cx);
+        let fs = FakeFs::new(cx.executor());
+
+        let project = Project::test(fs, None, cx).await;
+        let (workspace, cx) = cx.add_window_view(|cx| Workspace::test_new(project.clone(), cx));
+        let pane = workspace.update(cx, |workspace, _| workspace.active_pane().clone());
+
+        for i in 0..7 {
+            add_labeled_item(&pane, format!("{}", i).as_str(), false, cx);
+        }
+        set_max_tabs(cx, Some(5));
+        add_labeled_item(&pane, "7", false, cx);
+        // Remove items to respect the max tab cap.
+        assert_item_labels(&pane, ["3", "4", "5", "6", "7*"], cx);
+        pane.update(cx, |pane, cx| {
+            pane.activate_item(0, false, false, cx);
+        });
+        add_labeled_item(&pane, "X", false, cx);
+        // Respect activation order.
+        assert_item_labels(&pane, ["3", "X*", "5", "6", "7"], cx);
+
+        for i in 0..7 {
+            add_labeled_item(&pane, format!("D{}", i).as_str(), true, cx);
+        }
+        // Keeps dirty items, even over max tab cap.
+        assert_item_labels(
+            &pane,
+            ["D0^", "D1^", "D2^", "D3^", "D4^", "D5^", "D6*^"],
+            cx,
+        );
+
+        set_max_tabs(cx, None);
+        for i in 0..7 {
+            add_labeled_item(&pane, format!("N{}", i).as_str(), false, cx);
+        }
+        // No cap when max tabs is None.
+        assert_item_labels(
+            &pane,
+            [
+                "D0^", "D1^", "D2^", "D3^", "D4^", "D5^", "D6^", "N0", "N1", "N2", "N3", "N4",
+                "N5", "N6*",
+            ],
+            cx,
+        );
     }
 
     #[gpui::test]
@@ -3082,6 +3160,14 @@ mod tests {
             theme::init(LoadThemes::JustBase, cx);
             crate::init_settings(cx);
             Project::init_settings(cx);
+        });
+    }
+
+    fn set_max_tabs(cx: &mut TestAppContext, value: Option<usize>) {
+        cx.update_global(|store: &mut SettingsStore, cx| {
+            store.update_user_settings::<WorkspaceSettings>(cx, |settings| {
+                settings.max_tabs = value.map(|v| NonZero::new(v).unwrap())
+            });
         });
     }
 
