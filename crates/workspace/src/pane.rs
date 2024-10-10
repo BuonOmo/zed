@@ -803,22 +803,29 @@ impl Pane {
             // count.
             let mut index_list = Vec::new();
             let mut items_len = self.items_len();
+            let mut indexes: HashMap<EntityId, usize> = HashMap::default();
+            for (index, item) in self.items.iter().enumerate() {
+                indexes.insert(item.item_id(), index);
+            }
             for entry in self.activation_history.iter() {
                 if items_len < max_tabs.get() {
                     break;
                 }
-                let index_to_remove = self.items.iter().enumerate().find_map(|(index, item)| {
-                    (!item.is_dirty(cx) && item.item_id() == entry.entity_id).then_some(index)
-                });
-                if let Some(index_to_remove) = index_to_remove {
-                    index_list.push(index_to_remove);
-                    items_len -= 1;
+                if !indexes.contains_key(&entry.entity_id) {
+                    continue;
                 }
+                let index = indexes[&entry.entity_id];
+                if let Some(true) = self.items.get(index).map(|item| item.is_dirty(cx)) {
+                    continue;
+                }
+
+                index_list.push(index);
+                items_len -= 1;
             }
             // The sort and reverse is necessary since we remove items
             // using their index position, hence removing from the end
             // of the list first to avoid changing indexes.
-            index_list.sort();
+            index_list.sort_unstable();
             index_list
                 .iter()
                 .rev()
